@@ -1,0 +1,27 @@
+---
+title: 'Assignment 2A Approach: SQL & R'
+author: "Ummay Rukiya"
+date: "2026-09-09"
+output: html_document
+---
+
+## Overview
+
+For this assignment, I plan to collect movie ratings from at least five people and store the results in a SQLite database. The six selected movies are *The Odyssey*, *Project Hail Mary*, *Toy Story 5*, *Spider-Man: Brand New Day*, *The Super Mario Galaxy Movie*, and *Moana*. Each participant will rate every movie they have seen on a scale from 1 to 5.
+
+## Planned Approach
+
+I will ask at least five people which of the six movies they have seen and collect their ratings. To protect their privacy, I will identify them as Participant 1, Participant 2, and so on instead of using their names.
+
+I plan to use SQLite because it is supported for this assignment and can be used directly through R. I will create three related tables: a users table, a movies table, and a ratings table. The users and movies tables will contain unique identification numbers, while the ratings table will connect each participant to each movie and store the rating.
+
+I will include the SQL commands used to create and populate all three tables. After storing the data, I will use R with the DBI and RSQLite packages to connect to the database, join the tables, and load the results into a dataframe. I will then inspect the data and calculate simple summaries, including the number of ratings and average rating for each movie.
+
+## Missing-Data Strategy
+
+Some participants may not have seen every movie. These missing ratings will be stored as `NULL` in SQL and will appear as `NA` after the data is loaded into R. I will keep track of the missing values but exclude them when calculating average movie ratings so that unseen movies are not treated as low ratings.
+
+## Anticipated Challenges
+
+The main challenges may include configuring the SQLite connection, correctly connecting the three tables through identification numbers, and making sure all ratings are either integers from 1 to 5 or missing. I will also need to make sure that the SQL code can recreate the tables and that no passwords or private participant information appear in the submitted files.
+
