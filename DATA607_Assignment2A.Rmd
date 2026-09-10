@@ -1,7 +1,0 @@
----
-title: 'Assignment 2A Approach: SQL & R'
-author: "Ummay Rukiya"
-date: "2026-09-09"
-output: html_document
----
-
