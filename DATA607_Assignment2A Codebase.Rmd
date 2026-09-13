@@ -1,0 +1,234 @@
+---
+title: 'Assignment 2A: SQL & R'
+author: "Ummay Rukiya"
+date: "2026-09-09"
+output: html_document
+---
+
+## Overview
+
+For this assignment, I plan to collect movie ratings from at least five people and store the results in a SQLite database. The six selected movies are *The Odyssey*, *Project Hail Mary*, *Toy Story 5*, *Spider-Man: Brand New Day*, *The Super Mario Galaxy Movie*, and *Moana*. Each participant will rate every movie they have seen on a scale from 1 to 5.
+
+## Planned Approach
+
+I will ask at least five people which of the six movies they have seen and collect their ratings. To protect their privacy, I will identify them as Participant 1, Participant 2, and so on instead of using their names.
+
+I plan to use SQLite because it is supported for this assignment and can be used directly through R. I will create three related tables: a users table, a movies table, and a ratings table. The users and movies tables will contain unique identification numbers, while the ratings table will connect each participant to each movie and store the rating.
+
+I will include the SQL commands used to create and populate all three tables. After storing the data, I will use R with the DBI and RSQLite packages to connect to the database, join the tables, and load the results into a dataframe. I will then inspect the data and calculate simple summaries, including the number of ratings and average rating for each movie.
+
+## Missing-Data Strategy
+
+Some participants may not have seen every movie. These missing ratings will be stored as `NULL` in SQL and will appear as `NA` after the data is loaded into R. I will keep track of the missing values but exclude them when calculating average movie ratings so that unseen movies are not treated as low ratings.
+
+## Anticipated Challenges
+
+The main challenges may include configuring the SQLite connection, correctly connecting the three tables through identification numbers, and making sure all ratings are either integers from 1 to 5 or missing. I will also need to make sure that the SQL code can recreate the tables and that no passwords or private participant information appear in the submitted files.
+
+## Database Setup
+
+I used SQLite because it does not require a password or a separate database server. The database is created in memory whenever this document runs.
+
+```{r database-setup}
+library(DBI)
+library(RSQLite)
+
+con <- dbConnect(RSQLite::SQLite(), ":memory:")
+dbExecute(con, "PRAGMA foreign_keys = ON;")
+```
+
+## Creating the SQL Tables
+
+I created separate tables for participants, movies, and ratings. The ratings table connects each participant to each movie using identification numbers.
+
+```{r create-tables}
+dbExecute(con, "DROP TABLE IF EXISTS ratings;")
+dbExecute(con, "DROP TABLE IF EXISTS participants;")
+dbExecute(con, "DROP TABLE IF EXISTS movies;")
+
+dbExecute(con, "
+CREATE TABLE participants (
+  participant_id INTEGER PRIMARY KEY,
+  participant_label TEXT NOT NULL UNIQUE
+);
+")
+
+dbExecute(con, "
+CREATE TABLE movies (
+  movie_id INTEGER PRIMARY KEY,
+  movie_title TEXT NOT NULL UNIQUE
+);
+")
+
+dbExecute(con, "
+CREATE TABLE ratings (
+  participant_id INTEGER NOT NULL,
+  movie_id INTEGER NOT NULL,
+  rating REAL,
+  PRIMARY KEY (participant_id, movie_id),
+  CHECK (rating IS NULL OR rating BETWEEN 1 AND 5),
+  FOREIGN KEY (participant_id) REFERENCES participants(participant_id),
+  FOREIGN KEY (movie_id) REFERENCES movies(movie_id)
+);
+")
+```
+
+## Adding Participants and Movies
+
+I used participant labels instead of personal names. Each movie and participant has a unique identification number.
+
+```{r add-participants-and-movies}
+dbExecute(con, "
+INSERT INTO participants (participant_id, participant_label)
+VALUES
+  (1, 'Participant 1'),
+  (2, 'Participant 2'),
+  (3, 'Participant 3'),
+  (4, 'Participant 4'),
+  (5, 'Participant 5');
+")
+
+dbExecute(con, "
+INSERT INTO movies (movie_id, movie_title)
+VALUES
+  (1, 'The Odyssey'),
+  (2, 'Project Hail Mary'),
+  (3, 'Toy Story 5'),
+  (4, 'Spider-Man: Brand New Day'),
+  (5, 'The Super Mario Galaxy Movie'),
+  (6, 'Moana');
+")
+```
+
+## Adding the Movie Ratings
+
+The collected ratings are stored exactly as provided, including decimal ratings. A missing rating is stored as SQL `NULL` when a participant has not seen a movie.
+
+```{r add-ratings}
+dbExecute(con, "DELETE FROM ratings;")
+
+dbExecute(con, "
+INSERT INTO ratings (participant_id, movie_id, rating)
+VALUES
+  (1, 1, 4.5),
+  (2, 1, 4.9),
+  (3, 1, 3.5),
+  (4, 1, 5.0),
+  (5, 1, 4.5),
+
+  (1, 2, 5.0),
+  (2, 2, 5.0),
+  (3, 2, 4.5),
+  (4, 2, 4.8),
+  (5, 2, 3.5),
+
+  (1, 3, 4.0),
+  (2, 3, NULL),
+  (3, 3, 3.5),
+  (4, 3, 4.5),
+  (5, 3, 3.5),
+
+  (1, 4, 5.0),
+  (2, 4, NULL),
+  (3, 4, 4.8),
+  (4, 4, 4.5),
+  (5, 4, 5.0),
+
+  (1, 5, 3.5),
+  (2, 5, 3.0),
+  (3, 5, 3.5),
+  (4, 5, NULL),
+  (5, 5, 3.0),
+
+  (1, 6, 2.5),
+  (2, 6, 3.0),
+  (3, 6, 3.3),
+  (4, 6, NULL),
+  (5, 6, NULL);
+")
+```
+
+## Loading the SQL Data into R
+
+I used a SQL query with joins to combine the three tables. The result is loaded into R as a dataframe named `movie_ratings`.
+
+```{r load-data}
+movie_ratings <- dbGetQuery(con, "
+SELECT
+  p.participant_id,
+  p.participant_label,
+  m.movie_id,
+  m.movie_title,
+  r.rating
+FROM ratings AS r
+JOIN participants AS p
+  ON r.participant_id = p.participant_id
+JOIN movies AS m
+  ON r.movie_id = m.movie_id
+ORDER BY p.participant_id, m.movie_id;
+")
+
+head(movie_ratings, 12)
+```
+
+## Handling Missing Ratings
+
+Ratings marked as “Not Seen” were stored as SQL `NULL`. After the data was loaded into R, these values became `NA`. I kept them as missing rather than replacing them with zero because not seeing a movie is different from giving it a low rating.
+
+```{r missing-ratings}
+movie_ratings$rating_status <- ifelse(
+  is.na(movie_ratings$rating),
+  "Not Seen",
+  "Rated"
+)
+
+missing_ratings <- movie_ratings[
+  is.na(movie_ratings$rating),
+  c("participant_label", "movie_title", "rating_status")
+]
+
+missing_ratings
+```
+
+## Movie Rating Summary
+
+For each movie, I calculated how many ratings were received, how many ratings were missing, and the average of the available ratings. Missing ratings were removed only when calculating the averages.
+
+```{r movie-summary}
+movie_summary <- do.call(
+  rbind,
+  lapply(split(movie_ratings, movie_ratings$movie_title), function(movie) {
+    data.frame(
+      movie_title = movie$movie_title[1],
+      ratings_received = sum(!is.na(movie$rating)),
+      missing_ratings = sum(is.na(movie$rating)),
+      average_rating = round(mean(movie$rating, na.rm = TRUE), 2)
+    )
+  })
+)
+
+row.names(movie_summary) <- NULL
+movie_summary <- movie_summary[
+  order(movie_summary$average_rating, decreasing = TRUE),
+]
+
+movie_summary
+```
+
+## Conclusions and Next Steps
+
+I successfully collected movie ratings from five participants, stored them in three related SQLite tables, and loaded the combined data into an R dataframe. Out of 30 possible ratings, 25 movies were rated and five were marked as not seen. Missing ratings were kept as `NULL` in SQL and `NA` in R so they would not incorrectly lower the averages.
+
+*Spider-Man: Brand New Day* received the highest average rating at 4.82, while *Moana* received the lowest average rating at 2.93. These results only represent a small group of five people, so they cannot represent the opinions of a larger population. I could extend this project by collecting ratings from more people and comparing whether participants have different rating habits.
+
+```{r close-connection}
+dbDisconnect(con)
+```
+
+
+
+
+
+
+
+
